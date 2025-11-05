@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grana Money IA</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h2>💸 Grana Money IA</h2>
+  <div class="chat-box">
+    <div id="chat"></div>
+    <input id="userInput" placeholder="Digite sua pergunta..." />
+    <button onclick="sendMessage()">Enviar</button>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
+body {
+  background-color: #0d1117;
+  color: #00ff88;
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  margin: 0;
+}
+.chat-box {
+  width: 90%;
+  max-width: 600px;
+  background: #161b22;
+  padding: 20px;
+  border-radius: 16px;
+  box-shadow: 0 0 10px #00ff8850;
+  display: flex;
+  flex-direction: column;
+}
+#chat {
+  max-height: 400px;
+  overflow-y: auto;
+}
+input, button {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  margin-top: 10px;
+  border-radius: 10px;
+}
+input {
+  background: #0d1117;
+  color: #00ff88;
+  border: 1px solid #00ff88;
+}
+button {
+  background: #00ff88;
+  color: #0d1117;
+  font-weight: bold;
+  cursor: pointer;
+}
+#chat p {
+  padding: 8px;
+  border-radius: 10px;
+  margin: 5px 0;
+}
+#chat p.user {
+  background-color: #003311;
+}
+#chat p.ai {
+  background-color: #001100;
+}async function sendMessage() {
+  const input = document.getElementById("userInput");
+  const message = input.value.trim();
+  if (!message) return;
+
+  const chatDiv = document.getElementById("chat");
+  chatDiv.innerHTML += `<p class="user"><b>Você:</b> ${message}</p>`;
+  input.value = "";
+  chatDiv.scrollTop = chatDiv.scrollHeight;
+
+  // Chamada para a função serverless
+  const res = await fetch("/.netlify/functions/chat", {
+    method: "POST",
+    body: JSON.stringify({ message })
+  });
+  const data = await res.json();
+  chatDiv.innerHTML += `<p class="ai"><b>IA:</b> ${data.reply}</p>`;
+  chatDiv.scrollTop = chatDiv.scrollHeight;
+}
