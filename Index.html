@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -5,14 +6,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Grana Money IA</title>
   <link rel="stylesheet" href="style.css">
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 </head>
 <body>
-  <h2>💸 Grana Money IA</h2>
-  <div class="chat-box">
+  <!-- Landing / Login -->
+  <div id="landing">
+    <h2>💸 Grana Money IA</h2>
+    <p>Sua assistente financeira pessoal.</p>
+    <input id="email" placeholder="Email" />
+    <input id="password" type="password" placeholder="Senha" />
+    <button id="signupBtn">Cadastrar</button>
+    <button id="loginBtn">Entrar</button>
+    <button id="payBtn" style="display:none;">Pagar para liberar acesso</button>
+  </div>
+
+  <!-- Chat -->
+  <div class="chat-box" id="chatBox" style="display:none;">
     <div id="chat"></div>
     <input id="userInput" placeholder="Digite sua pergunta..." />
-    <button onclick="sendMessage()">Enviar</button>
+    <button id="sendBtn">Enviar</button>
   </div>
+
   <script src="app.js"></script>
 </body>
 </html>
@@ -27,7 +42,8 @@ body {
   min-height: 100vh;
   margin: 0;
 }
-.chat-box {
+
+.chat-box, #landing {
   width: 90%;
   max-width: 600px;
   background: #161b22;
@@ -37,10 +53,7 @@ body {
   display: flex;
   flex-direction: column;
 }
-#chat {
-  max-height: 400px;
-  overflow-y: auto;
-}
+
 input, button {
   width: 100%;
   padding: 10px;
@@ -48,43 +61,142 @@ input, button {
   margin-top: 10px;
   border-radius: 10px;
 }
+
 input {
   background: #0d1117;
   color: #00ff88;
   border: 1px solid #00ff88;
 }
+
 button {
   background: #00ff88;
   color: #0d1117;
   font-weight: bold;
   cursor: pointer;
 }
+
 #chat p {
   padding: 8px;
   border-radius: 10px;
   margin: 5px 0;
 }
+
 #chat p.user {
   background-color: #003311;
 }
+
 #chat p.ai {
   background-color: #001100;
-}async function sendMessage() {
-  const input = document.getElementById("userInput");
-  const message = input.value.trim();
-  if (!message) return;
+}
+// === FIREBASE ===
+const firebaseConfig = {
+  apiKey: "SUA_API_KEY",
+  authDomain: "SEU_AUTH_DOMAIN",
+  projectId: "SEU_PROJECT_ID",
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
 
-  const chatDiv = document.getElementById("chat");
+// === ELEMENTOS ===
+const signupBtn = document.getElementById("signupBtn");
+const loginBtn = document.getElementById("loginBtn");
+const payBtn = document.getElementById("payBtn");
+const landing = document.getElementById("landing");
+const chatBox = document.getElementById("chatBox");
+const sendBtn = document.getElementById("sendBtn");
+const userInput = document.getElementById("userInput");
+const chatDiv = document.getElementById("chat");
+
+// === FUNÇÕES AUTH ===
+signupBtn.addEventListener("click", async () => {
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  try {
+    await auth.createUserWithEmailAndPassword(email, password);
+    alert("Usuário cadastrado!");
+    payBtn.style.display = "block";
+  } catch(e) { alert(e.message); }
+});
+
+loginBtn.addEventListener("click", async () => {
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  try {
+    await auth.signInWithEmailAndPassword(email, password);
+    // Aqui você checaria no backend se o usuário já pagou
+    const paid = false; // exemplo, substituir por checagem real
+    if(paid){
+      landing.style.display = "none";
+      chatBox.style.display = "flex";
+    } else {
+      payBtn.style.display = "block";
+      alert("Faça o pagamento para liberar o chat");
+    }
+  } catch(e){ alert(e.message); }
+});
+
+// === FUNÇÃO PAGAMENTO ===
+payBtn.addEventListener("click", async () => {
+  const uid = auth.currentUser.uid;
+  const res = await fetch("/.netlify/functions/create-checkout-session", {
+    method:"POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ uid })
+  });
+  const { sessionId } = await res.json();
+  const stripe = Stripe("SUA_STRIPE_PUBLISHABLE_KEY");
+  await stripe.redirectToCheckout({ sessionId });
+});
+
+// === CHAT ===
+sendBtn.addEventListener("click", async () => {
+  const message = userInput.value.trim();
+  if(!message) return;
   chatDiv.innerHTML += `<p class="user"><b>Você:</b> ${message}</p>`;
-  input.value = "";
+  userInput.value = "";
   chatDiv.scrollTop = chatDiv.scrollHeight;
 
-  // Chamada para a função serverless
   const res = await fetch("/.netlify/functions/chat", {
-    method: "POST",
+    method:"POST",
     body: JSON.stringify({ message })
   });
   const data = await res.json();
   chatDiv.innerHTML += `<p class="ai"><b>IA:</b> ${data.reply}</p>`;
   chatDiv.scrollTop = chatDiv.scrollHeight;
-}
+});
+const Stripe = require("stripe");
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
+exports.handler = async function(event) {
+  const { uid } = JSON.parse(event.body);
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ["card"],
+    line_items: [{ price: "SEU_PRICE_ID", quantity: 1 }],
+    mode: "payment",
+    success_url: `https://SEU_SITE.netlify.app/success?uid=${uid}`,
+    cancel_url: `https://SEU_SITE.netlify.app/`
+  });
+  return { statusCode:200, body: JSON.stringify({ sessionId: session.id }) };
+};const Stripe = require("stripe");
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+const admin = require("firebase-admin");
+
+admin.initializeApp({
+  credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT))
+});
+
+exports.handler = async (event) => {
+  const sig = event.headers["stripe-signature"];
+  let stripeEvent;
+  try {
+    stripeEvent = stripe.webhooks.constructEvent(event.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+  } catch(err) { return { statusCode:400, body: `Webhook Error: ${err.message}` }; }
+
+  if(stripeEvent.type === "checkout.session.completed"){
+    const session = stripeEvent.data.object;
+    const uid = session.client_reference_id || session.success_url_params?.uid;
+    await admin.firestore().collection("users").doc(uid).set({ hasAccess:true }, { merge:true });
+  }
+
+  return { statusCode:200, body:"ok" };
+};
